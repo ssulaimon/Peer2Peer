@@ -1,0 +1,6 @@
+dotenv: .env
+
+networks:
+  sepolia:
+    wallets:
+      account-one: ${ACCOUNT_ONE_PRIVATE_KEY}
