@@ -1,126 +1,81 @@
 //SPDX-License-Identifier:MIT
-
 pragma solidity >=0.8.0 <0.9.0;
+
 import "../interfaces/ITokenInterface.sol";
 
 contract Peer2Peer{
-
-    constructor(){
-        exchageAssets.push(ExchangeAssets({name: "USDT", assetContract: 0xe69D0Aa17482DefcEfbA92298d47fAe73615fcB0}));
-        exchageAssets.push(ExchangeAssets({name: "USDC", assetContract: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238}));
-        exchageAssets.push(ExchangeAssets({name: "EURC", assetContract: 0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4}));
-         exchageAssets.push(ExchangeAssets({name: "WrappedETH", assetContract: 0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9}));
-         
-        
+    address owner;
+    constructor (){
+        owner = msg.sender;
+    }
+    event Deposited(address indexed _depositor, uint256 indexed _amount, address indexed _tokenContract);
+    event CreatedOffer(address indexed creator, string indexed assetType, uint256 indexed quantity);
+    mapping (address=> uint256) _addressToRating;
+    uint256 private _tradeId;
+    struct Trade{
+        uint256 tradeId;
+        string  assetType;
+        uint256 quantity;
+        uint256 price;
+        address creator;
+        string discriptions;
+        address payingWith;
     }
 
-    enum Assets{
-        USDT,
-        USDC,
-        TT,
-        WETH
+    Trade[] _trades;
+    //numbers of trades created by an address
+    mapping(address=>uint256) numbersOfOpenTrade;
+
+    mapping (address=> mapping(address=> uint256))_addressToAssetBalance;
+
+    function assetBalance(address _assetContractAddress)public view returns(uint256){
+        return ITokenInterface(_assetContractAddress).balanceOf(address(this));
+    }
+// user deposit an asset to the contract
+    function assetDeposit (address _depositor, address _assetContractAddress, uint256 _amount)public{
+        _addressToAssetBalance[_depositor][_assetContractAddress] = _amount;
+       emit Deposited(_depositor, _amount, _assetContractAddress);
+    }
+// check user balance of asset
+    function addressToAssetBalance(address _owner, address _assetContractAddress)public view returns(uint256){
+        return _addressToAssetBalance[_owner][_assetContractAddress];
     }
 
-    //model for each asset accepted on the contract
-    struct ExchangeAssets{
-        string name;
-        address assetContract;
+    function activeTrades()public view returns(Trade[]memory){
+        return _trades;
     }
 
-    // model for market orders that can be created
-    struct MarketOrder{
-        string orderName;
-        uint256 amount;
-        address seller;
-        address buyer;
-        uint256 rating;
-        address exchangeAsset;
-    }
-    // model for each moderators that would be on the platform
-    struct Moderator{
-        address moderatorAddress;
-        uint256 disputeResolved;
-
+    function _isAddressAllowedTrade(address _address)internal view returns(bool){
+        if(numbersOfOpenTrade[_address] <=5){
+            return true;
+        }else{
+            return false;
+        }
     }
 
-// mapping an address to the number of dispute they resolved previously
-    mapping(address=>uint256) addressToDisputeResolved;
-// mapping ofaddress to their rating already earned on the system
-    mapping (address=>uint256) addressTorating;
-// address to the all time amount already deposited to the platform
-    mapping(address=> uint256) addressToAmountDeposited;
-// amount of token deposited by a moderator 
-    mapping(address=>uint256) moderatorDeposit;
-
-// list of assets accepted for exchange availabale
-    ExchangeAssets[] exchageAssets;
-// list of oders needed by a peer in the system
-    MarketOrder[] marketOrders;
-//moderators list in the system. 
-    Moderator[]moderators;
-
-//view assets list accepted for exchange
-    function exchangeAssetsList()public view returns(ExchangeAssets[] memory){
-        return exchageAssets;
+function _isEnoughBalance(address _address, uint256 _amount, address _assets) internal view  returns(bool){
+    if(_addressToAssetBalance[_address][_assets] <= _amount){
+        return true;
+    }else{
+        return false;
     }
- // adding an exchange assets function. Only caled by admin
+}
 
-    function addAssets(string memory _name, address _assetContract) public{
-        ExchangeAssets memory asset = ExchangeAssets({name: _name, assetContract: _assetContract});
-        exchageAssets.push(asset);
-    }
 
-    // check the balance of particular asset locked on the contract 
-
-    function assetBalanceInContract(address _address)public view returns(uint256){
-        return ITokenInterface(_address).balanceOf(address(this));
-    }
-
-// view list of market orders waiting to be filled by peers in the system
-    function marketOrdersList()public view returns(MarketOrder[]memory){
-        return marketOrders;
-    }
-
-// view the amount of token staked by a particular moderator
-
-    function checkModeratorDeposit(address _address)public view returns(uint256){
-        return moderatorDeposit[_address];
-    }
-
-//  view the ratings of a particular address
-    function viewAddressRating(address _address)public view returns(uint256){
-        return addressTorating[_address];
-    }
-
-// view the number of dispute been resolved by a moderator
-    function viewModeratorDisputeResulved(address _address)public view returns(uint256){
-        return addressToDisputeResolved[_address];
-    }
-
-//  struct MarketOrder{
-//         string orderName;
-//         uint256 amount;
-//         address seller;
-//         address buyer;
-//         uint256 rating;
-//     }
-    function createMarketOrder(address  _asset, string memory _name, uint256 _amount)public returns(bool){
-        address _buyer;
-        uint256 _rating = addressTorating[msg.sender];
-        MarketOrder memory marketOrder = MarketOrder({orderName: _name, amount:_amount, seller:msg.sender, buyer:_buyer, rating: _rating, exchangeAsset: _asset});
-        marketOrders.push(marketOrder);
+    function createOffer(uint256 _quantity, uint256 _price, string memory _description, address _assets, string memory _assetType)public returns(bool){
+        require(_isAddressAllowedTrade(msg.sender), "You have more enough minumum open trade!!!");
+        uint256 amountNeeded = _price * _quantity;
+        require(_isEnoughBalance(msg.sender, amountNeeded, _assets), "You don't have enough balance required!!!");
+        Trade memory trade = Trade({tradeId: _tradeId, assetType: _assetType, quantity:_quantity, price: _price, creator:msg.sender, discriptions:_description, payingWith:_assets});
+        _trades.push(trade);
+        _tradeId +=1;
+        numbersOfOpenTrade[msg.sender] +=1;
         return true;
     }
-    // approve a token 
-    function approveToken(address _token, uint256 _value)external returns(bool){
-        bool isApproved = ITokenInterface(_token).approve( address(this), _value);
-        return isApproved;
 
+    function transerToken (address _assetAddres, address _to, uint256 _value)public{
+        require(msg.sender == owner, "Only Owner can call this function !!!");
+        ITokenInterface(_assetAddres).transfer(_to, _value);
     }
-// check amount allowed to spend
-    function checkAllowance(address _tokenAddress)external view returns(uint256){
-        return ITokenInterface(_tokenAddress).allowance(msg.sender, address(this));
-    }
-
 
 }

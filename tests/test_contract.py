@@ -1,24 +1,25 @@
 from brownie import Peer2Peer, interface
-from scripts.modules import recentDeployedContract, convertToWei, walletAccount
+from scripts.modules import (
+    recentDeployedContract,
+    convertToWei,
+    walletAccount,
+    asset,
+    convertToWei,
+)
 
 
-def test_approval():
-    tokenInterface = interface.ITokenInterface(
-        "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
-    )
-    contractAddress = recentDeployedContract()
-    value = convertToWei(amount=3)
-    address = walletAccount()
-    approveValue = tokenInterface.approve(contractAddress, value, {"from": address})
-    # address _owner, address _spender
-    allowance = tokenInterface.allowance(address, contractAddress)
-    assert allowance == value
-
-
-def test_depositedTokenBalance():
+def test_contractBalance():
+    token = asset(index=0)
     contract = Peer2Peer[-1]
-    checker = contract.assetBalanceInContract(
-        "0x17396d7e7Ed759E772dB33c83C2F75fdB8d2c1d2"
-    )
-    value = convertToWei(amount=3)
-    assert checker == value
+    balanceWrappedEth = contract.assetBalance(token["contractAddress"])
+    expectedAmount = convertToWei(amount=0.001)
+    assert balanceWrappedEth >= expectedAmount
+
+
+def test_walletBalance():
+    address = walletAccount()
+    token = asset(index=0)
+    contract = Peer2Peer[-1]
+    userBalance = contract.addressToAssetBalance(address, token["contractAddress"])
+    expectedAmount = convertToWei(amount=0.001)
+    assert userBalance >= expectedAmount
