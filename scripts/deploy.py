@@ -1,6 +1,7 @@
-from brownie import Peer2Peer, interface
+from brownie import Peer2Peer, interface, exceptions
 from scripts.modules import walletAccount, recentDeployedContract, convertToWei, asset
-from brownie.exceptions import VirtualMachineError
+
+from web3 import Web3
 
 
 def deployContract():
@@ -77,7 +78,7 @@ def createOrder():
     address = walletAccount()
     try:
         createOffer = contract.createOffer(
-            2,
+            1,
             amount,
             "Buying MTN rechard card",
             token_contract["contractAddress"],
@@ -86,8 +87,20 @@ def createOrder():
                 "from": address,
             },
         )
-    except VirtualMachineError as error:
+    except exceptions.VirtualMachineError as error:
+        if error == "You don't have enough balance required!!!":
+            value = Web3.from_wei(amount)
+            print(f"You need {value} Eth!!!")
+        else:
+            print(error)
+    except ValueError as error:
         print(error)
+
+
+def openTrades():
+    contract = Peer2Peer[-1]
+    offers = contract.trades()
+    print(offers[0][1])
 
 
 def main():
